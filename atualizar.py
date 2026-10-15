@@ -29,6 +29,35 @@ def env(nome, padrao=None):
     return v or padrao
 
 
+def listar(sftp, pasta):
+    """listdir que ignora erro no CLOSE (a raiz da Shockbyte e uma 'lista de servidores'
+    que aceita ler mas nao aceita fechar)."""
+    from paramiko.sftp import CMD_CLOSE, CMD_HANDLE, CMD_NAME, CMD_OPENDIR, CMD_READDIR
+    t, msg = sftp._request(CMD_OPENDIR, pasta)
+    if t != CMD_HANDLE:
+        raise IOError("sem handle")
+    handle = msg.get_binary()
+    nomes = []
+    while True:
+        try:
+            t, msg = sftp._request(CMD_READDIR, handle)
+        except EOFError:
+            break
+        if t != CMD_NAME:
+            break
+        for _ in range(msg.get_int()):
+            nome = msg.get_text()
+            longo = msg.get_text()
+            paramiko.SFTPAttributes._from_msg(msg, nome, longo)
+            if nome not in (".", ".."):
+                nomes.append(nome)
+    try:
+        sftp._request(CMD_CLOSE, handle)
+    except Exception:
+        pass
+    return sorted(nomes)
+
+
 def baixar_ranking():
     host = env("SFTP_HOST").replace("sftp://", "").strip("/")
     porta = int(env("SFTP_PORT", "2222"))
@@ -46,17 +75,17 @@ def baixar_ranking():
         except IOError as e:
             # mostra o que existe na raiz e no caminho ate onde der, para achar o nome certo
             print(f"Nao achei '{caminho}': {e}")
-            for pasta in (".", "/"):
+            for pasta in ("/", "."):
                 try:
-                    print(f"Conteudo de '{pasta}': {sorted(sftp.listdir(pasta))}")
-                except IOError as e2:
+                    print(f"Conteudo de '{pasta}': {listar(sftp, pasta)}")
+                except Exception as e2:
                     print(f"Nao consegui listar '{pasta}': {e2}")
             partes = caminho.strip("/").split("/")
             for i in range(1, len(partes)):
                 sub = "/".join(partes[:i])
                 try:
-                    print(f"Conteudo de '{sub}': {sorted(sftp.listdir(sub))}")
-                except IOError:
+                    print(f"Conteudo de '{sub}': {listar(sftp, sub)}")
+                except Exception:
                     print(f"'{sub}' nao existe")
                     break
             sys.exit("Ajuste o segredo RANKING_PATH usando a lista acima")
