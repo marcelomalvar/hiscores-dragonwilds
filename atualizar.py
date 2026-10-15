@@ -39,8 +39,27 @@ def baixar_ranking():
     try:
         t.connect(username=env("SFTP_USER"), password=env("SFTP_PASS"))
         sftp = paramiko.SFTPClient.from_transport(t)
-        with sftp.open(env("RANKING_PATH"), "rb") as f:
-            return f.read().decode("utf-8")
+        caminho = env("RANKING_PATH")
+        try:
+            with sftp.open(caminho, "rb") as f:
+                return f.read().decode("utf-8")
+        except IOError as e:
+            # mostra o que existe na raiz e no caminho ate onde der, para achar o nome certo
+            print(f"Nao achei '{caminho}': {e}")
+            for pasta in (".", "/"):
+                try:
+                    print(f"Conteudo de '{pasta}': {sorted(sftp.listdir(pasta))}")
+                except IOError as e2:
+                    print(f"Nao consegui listar '{pasta}': {e2}")
+            partes = caminho.strip("/").split("/")
+            for i in range(1, len(partes)):
+                sub = "/".join(partes[:i])
+                try:
+                    print(f"Conteudo de '{sub}': {sorted(sftp.listdir(sub))}")
+                except IOError:
+                    print(f"'{sub}' nao existe")
+                    break
+            sys.exit("Ajuste o segredo RANKING_PATH usando a lista acima")
     finally:
         t.close()
 
